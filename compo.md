@@ -2,26 +2,26 @@
 flowchart LR
   %% ===== LAYERS =====
   subgraph ext[External / Producers & Consumers]
-    EMIS[EMIS System\n(API Producer)]
+    EMIS[EMIS System <br/> (API Producer)]
     Admin[Ops/Admin UI]
     BIUser[BI / Analysts]
   end
 
   subgraph integ[Integration Layer]
-    DG[Data Gateway\n(API Client + Ingestion Service)]
+    DG[Data Gateway <br/> (API Client + Ingestion Service)]
     MQ[Event Bus / Queue]
   end
 
   subgraph proc[Processing & Orchestration]
-    PySched[Python Schedulers\n(Cron/Workers)]
-    ETL[ETL Tool\n(Informatica Cloud)]
-    BM[BlueMoon Parser\n(JSON → Relational)]
+    PySched[Python Schedulers <br/> (Cron/Workers)]
+    ETL[ETL Tool <br/> (Informatica Cloud)]
+    BM[BlueMoon Parser <br/> (JSON → Relational)]
   end
 
   subgraph data[Data Stores]
-    Art1[(Oracle - Art1\nRaw JSON Staging)]
-    BMDB[(Oracle - BlueMoon\nParsed Relational)]
-    DW[(Synapse / DWH\nStar Schemas)]
+    Art1[(Oracle - Art1 <br/> Raw JSON Staging)]
+    BMDB[(Oracle - BlueMoon <br/> Parsed Relational)]
+    DW[(Synapse / DWH <br/> Star Schemas)]
   end
 
   subgraph analytics[Analytics & Serving]
@@ -30,9 +30,9 @@ flowchart LR
   end
 
   subgraph sec[Cross-Cutting]
-    IAM[Identity & Access Mgmt\n(SSO/OIDC)]
+    IAM[Identity & Access Mgmt <br/> (SSO/OIDC)]
     Vault[Secrets Manager]
-    Mon[Monitoring & Logs\n(Prom/Grafana/ELK)]
+    Mon[Monitoring & Logs <br/> (Prom/Grafana/ELK)]
     Alert[Alerting]
   end
 
