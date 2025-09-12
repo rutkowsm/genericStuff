@@ -1,3 +1,4 @@
+```mermaid
 flowchart LR
   %% ===== LAYERS =====
   subgraph ext[External / Producers & Consumers]
