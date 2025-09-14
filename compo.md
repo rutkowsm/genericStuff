@@ -1,69 +1,68 @@
 ```mermaid
-flowchart LR
-  %% ===== LAYERS =====
-  subgraph ext[External / Producers & Consumers]
-    EMIS[EMIS System <br/> (API Producer)]
-    Admin[Ops/Admin UI]
-    BIUser[BI / Analysts]
+
+sequenceDiagram
+  title AutoSys Morning ETL: Lotus Notes → Linux → Magellan (Oracle)
+
+  actor AutoSys as AutoSys (scheduler)
+  participant LN as Lotus Notes Modules
+  participant LNFS as LN Server (CSV location)
+  participant Xfer as Xfer (file mover)
+  participant LFS as Linux Disk (landing)
+
+  box Magellan DB (Oracle)
+    participant PLSQL as PL/SQL Loader (procedures)
+    participant LND as Schema: STG/LND (raw)
+    participant UNI as Schema: Unified/Final
+    participant ERR as Error Log (rejects)
+  end
+  participant Alert as Alerting
+
+  %% 1) Extract CSVs from Lotus Notes
+  AutoSys->>LN: Run extract modules
+  LN->>LNFS: Write .csv extracts
+
+  %% 2) Move files LN → Linux
+  AutoSys->>Xfer: Start transfer batch
+  Xfer->>LNFS: Fetch .csv files
+  Xfer->>LFS: Place .csv files
+
+  %% 3) Load files to Magellan (LND)
+  AutoSys->>PLSQL: Invoke load_from_files()
+  PLSQL->>LFS: Discover files
+  alt Files present?
+    LFS-->>PLSQL: File list
+  else No files
+    LFS-->>PLSQL: (none)
+    PLSQL-->>AutoSys: Missing input files
+    AutoSys->>Alert: ALERT: No files present → abort
+    AutoSys-->>AutoSys: Abort job
+    deactivate PLSQL
+    return
   end
 
-  subgraph integ[Integration Layer]
-    DG[Data Gateway <br/> (API Client + Ingestion Service)]
-    MQ[Event Bus / Queue]
+  loop For each file in list
+    PLSQL->>LND: Load rows from file
+    alt Load succeeded?
+      LND-->>PLSQL: Insert/Merge OK
+    else Load failed
+      LND-->>PLSQL: Error
+      PLSQL-->>AutoSys: Load failure
+      AutoSys->>Alert: ALERT: File load failed → abort
+      AutoSys-->>AutoSys: Abort job
+      deactivate PLSQL
+      break
+    end
   end
 
-  subgraph proc[Processing & Orchestration]
-    PySched[Python Schedulers <br/> (Cron/Workers)]
-    ETL[ETL Tool <br/> (Informatica Cloud)]
-    BM[BlueMoon Parser <br/> (JSON → Relational)]
+  %% 4) Cleanse & unify to final schema
+  PLSQL->>UNI: Transform / cleanse / unify
+  alt Row-level validation errors occur
+    PLSQL->>ERR: Insert rejected records
+    note right of ERR: Job continues despite rejects
+  else No rejects
+    UNI-->>PLSQL: Commit OK
   end
 
-  subgraph data[Data Stores]
-    Art1[(Oracle - Art1 <br/> Raw JSON Staging)]
-    BMDB[(Oracle - BlueMoon <br/> Parsed Relational)]
-    DW[(Synapse / DWH <br/> Star Schemas)]
-  end
-
-  subgraph analytics[Analytics & Serving]
-    PBI[Power BI / Dashboards]
-    API[Read API / Data Service]
-  end
-
-  subgraph sec[Cross-Cutting]
-    IAM[Identity & Access Mgmt <br/> (SSO/OIDC)]
-    Vault[Secrets Manager]
-    Mon[Monitoring & Logs <br/> (Prom/Grafana/ELK)]
-    Alert[Alerting]
-  end
-
-  %% ===== FLOWS =====
-  EMIS -- REST/JSON --> DG
-  DG -- Retry/Bulk --> Art1
-  DG -- Async Events --> MQ
-
-  MQ --> PySched
-  PySched --> BM
-  BM -- Parse/Validate --> BMDB
-
-  ETL -- Extract --> BMDB
-  ETL -- Load/Transform --> DW
-
-  API -- SQL/Views --> DW
-  PBI <-- Datasets/DirectQuery --> DW
-  BIUser --> PBI
-  Admin --> DG
-
-  %% ===== CONTROLS & TELEMETRY =====
-  DG -. auth .- IAM
-  API -. auth .- IAM
-  ETL -. secrets .- Vault
-  PySched -. secrets .- Vault
-  DG -. metrics/logs .-> Mon
-  BM -. metrics/logs .-> Mon
-  ETL -. metrics/logs .-> Mon
-  API -. metrics/logs .-> Mon
-  Mon --> Alert
-
-  %% ===== NOTES / PROTOCOLS =====
-  classDef store fill:#f6f8fa,stroke:#999,stroke-width:1px;
-  class Art1,BMDB,DW store;
+  %% 5) Finish
+  PLSQL-->>AutoSys: All files processed, final schema loaded
+  AutoSys->>Alert: Success notification (optional)
